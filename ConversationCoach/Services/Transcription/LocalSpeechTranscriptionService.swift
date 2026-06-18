@@ -24,15 +24,26 @@ final class LocalSpeechTranscriptionService: TranscriptionProviding, @unchecked 
 
     func transcribeAudioFile(at url: URL) async throws -> String {
         try await requestSpeechAuthorization()
-        let recognizer = try makeOnDeviceRecognizer()
-        recognizer.queue = recognitionQueue
 
-        let didAccessSecurityScopedResource = url.startAccessingSecurityScopedResource()
+        let temporaryFile = try Self.temporaryLocalCopy(of: url)
         defer {
-            if didAccessSecurityScopedResource {
-                url.stopAccessingSecurityScopedResource()
+            temporaryFile.cleanup()
+        }
+
+        if #available(iOS 26.0, *), SpeechTranscriber.isAvailable {
+            do {
+                return try await transcribeAudioFileWithAnalyzer(at: temporaryFile.url)
+            } catch {
+                // Fall back to the legacy recognizer path; some locales may not have SpeechAnalyzer assets installed yet.
             }
         }
+
+        return try await transcribeAudioFileWithLegacyRecognizer(at: temporaryFile.url)
+    }
+
+    private func transcribeAudioFileWithLegacyRecognizer(at url: URL) async throws -> String {
+        let recognizer = try makeOnDeviceRecognizer()
+        recognizer.queue = recognitionQueue
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         configure(request)
@@ -83,6 +94,61 @@ final class LocalSpeechTranscriptionService: TranscriptionProviding, @unchecked 
                     resumeOnce(.failure(error))
                 }
             }
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func transcribeAudioFileWithAnalyzer(at url: URL) async throws -> String {
+        let supportedLocale = await SpeechTranscriber.supportedLocale(equivalentTo: locale) ?? locale
+        let transcriber = SpeechTranscriber(
+            locale: supportedLocale,
+            preset: .timeIndexedTranscriptionWithAlternatives
+        )
+        let audioFile = try AVAudioFile(forReading: url)
+        let analyzer = SpeechAnalyzer(
+            modules: [transcriber],
+            options: SpeechAnalyzer.Options(
+                priority: .userInitiated,
+                modelRetention: .whileInUse
+            )
+        )
+
+        let resultTask = Task {
+            var finalized: [String] = []
+            var latestVolatile = ""
+
+            for try await result in transcriber.results {
+                let text = String(result.text.characters)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard text.isEmpty == false else { continue }
+
+                if result.isFinal {
+                    finalized.append(text)
+                } else {
+                    latestVolatile = text
+                }
+            }
+
+            return (finalized + [latestVolatile])
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { $0.isEmpty == false }
+                .joined(separator: " ")
+        }
+
+        do {
+            try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
+            let text = try await resultTask.value
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard text.isEmpty == false else {
+                throw TranscriptionError.noSpeechRecognized
+            }
+
+            return text
+        } catch {
+            resultTask.cancel()
+            await analyzer.cancelAndFinishNow()
+            throw error
         }
     }
 
@@ -326,6 +392,45 @@ final class LocalSpeechTranscriptionService: TranscriptionProviding, @unchecked 
         } while isDone == false
     }
 
+    private static func temporaryLocalCopy(of url: URL) throws -> TemporaryAudioFile {
+        let didAccessSecurityScopedResource = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccessSecurityScopedResource {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let fileName = url.lastPathComponent.isEmpty ? "ImportedAudio.m4a" : url.lastPathComponent
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString)-\(fileName)")
+
+        var coordinatorError: NSError?
+        var copyError: Error?
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+
+        coordinator.coordinate(readingItemAt: url, options: [], error: &coordinatorError) { readableURL in
+            do {
+                if FileManager.default.fileExists(atPath: temporaryURL.path) {
+                    try FileManager.default.removeItem(at: temporaryURL)
+                }
+
+                try FileManager.default.copyItem(at: readableURL, to: temporaryURL)
+            } catch {
+                copyError = error
+            }
+        }
+
+        if let coordinatorError {
+            throw coordinatorError
+        }
+
+        if let copyError {
+            throw copyError
+        }
+
+        return TemporaryAudioFile(url: temporaryURL)
+    }
+
     private func makeOnDeviceRecognizer() throws -> SFSpeechRecognizer {
         guard let recognizer = SFSpeechRecognizer(locale: locale) else {
             throw TranscriptionError.recognizerUnavailable(locale.identifier)
@@ -391,6 +496,14 @@ private final class SpeechBufferAppendTarget: @unchecked Sendable {
 
     init(_ request: SFSpeechAudioBufferRecognitionRequest) {
         self.request = request
+    }
+}
+
+private struct TemporaryAudioFile {
+    let url: URL
+
+    func cleanup() {
+        try? FileManager.default.removeItem(at: url)
     }
 }
 

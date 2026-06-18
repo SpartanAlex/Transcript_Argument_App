@@ -3,7 +3,7 @@ import SwiftUI
 
 protocol QuestionGenerating: Sendable {
     func availability() async -> ModelAvailabilitySummary
-    func generateQuestions(from transcript: String) async throws -> QuestionSet
+    func generateQuestions(from transcript: String, topic: ConversationTopic) async throws -> QuestionSet
 }
 
 enum ModelAvailabilitySummary: Equatable {
@@ -58,4 +58,3 @@ enum QuestionGenerationError: LocalizedError {
         }
     }
 }
-

@@ -22,7 +22,7 @@ struct FoundationQuestionGenerator: QuestionGenerating {
         #endif
     }
 
-    func generateQuestions(from transcript: String) async throws -> QuestionSet {
+    func generateQuestions(from transcript: String, topic: ConversationTopic) async throws -> QuestionSet {
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else {
             throw QuestionGenerationError.modelUnavailable("Apple Foundation Models require iOS 26 or newer.")
@@ -40,48 +40,56 @@ struct FoundationQuestionGenerator: QuestionGenerating {
             Use only the provided transcript.
             Produce concise, specific questions.
             Separate questions that strengthen or clarify the current line of thought from questions that challenge assumptions, risks, or missing evidence.
+            Tune the questions to the selected conversation topic.
             Avoid giving advice as if you are a party to the conversation.
             Never return placeholder text.
             """
         )
 
         let response = try await session.respond(
-            to: Self.prompt(for: transcript),
+            to: Self.prompt(for: transcript, topic: topic),
             options: GenerationOptions(
                 sampling: .greedy,
                 temperature: 0.2,
-                maximumResponseTokens: 700
+                maximumResponseTokens: 520
             )
         )
 
-        return Self.questionSet(from: response.content, transcript: transcript)
+        return Self.questionSet(from: response.content, transcript: transcript, topic: topic)
         #else
         throw QuestionGenerationError.modelUnavailable("Apple Foundation Models are not present in this SDK.")
         #endif
     }
 
-    private static func prompt(for transcript: String) -> String {
+    private static func prompt(for transcript: String, topic: ConversationTopic) -> String {
         """
         Read the transcript inside the delimiters and write questions a participant could ask next.
+
+        Conversation topic: \(topic.rawValue)
+        Topic focus: \(topic.promptFocus)
 
         <<<TRANSCRIPT
         \(transcript)
         TRANSCRIPT>>>
 
         Output only two sections named FOR and AGAINST.
-        Under each section, write three bullet points.
+        Under each section, write two bullet points.
         Each bullet must contain one concrete question based on the transcript, then a vertical bar, then a short reason the question is useful.
         The question text must not be generic and must not contain the words "Question", "placeholder", or "Why this helps".
         """
     }
 
-    private static func questionSet(from content: String, transcript: String) -> QuestionSet {
+    private static func questionSet(
+        from content: String,
+        transcript: String,
+        topic: ConversationTopic
+    ) -> QuestionSet {
         let parsed = parse(content)
-        let fallback = fallbackQuestionSet(from: transcript)
+        let fallback = fallbackQuestionSet(from: transcript, topic: topic)
 
         return QuestionSet(
-            supportive: fill(parsed.supportive, with: fallback.supportive),
-            challenging: fill(parsed.challenging, with: fallback.challenging)
+            supportive: fill(parsed.supportive, with: fallback.supportive, targetCount: 2),
+            challenging: fill(parsed.challenging, with: fallback.challenging, targetCount: 2)
         )
     }
 
@@ -206,7 +214,7 @@ struct FoundationQuestionGenerator: QuestionGenerating {
         return Array(result.prefix(targetCount))
     }
 
-    private static func fallbackQuestionSet(from transcript: String) -> QuestionSet {
+    private static func fallbackQuestionSet(from transcript: String, topic: ConversationTopic) -> QuestionSet {
         let topics = salientTerms(from: transcript)
         let primary = topics.first ?? "the main point"
         let secondary = topics.dropFirst().first ?? "the next decision"
@@ -214,30 +222,22 @@ struct FoundationQuestionGenerator: QuestionGenerating {
         return QuestionSet(
             supportive: [
                 ConversationQuestion(
-                    text: "What evidence in the conversation most strongly supports the point about \(primary)?",
+                    text: "What evidence in this \(topic.rawValue.lowercased()) conversation most strongly supports the point about \(primary)?",
                     rationale: "This asks the group to anchor the discussion in what has already been said."
                 ),
                 ConversationQuestion(
-                    text: "What would make the idea about \(secondary) clearer or easier to act on?",
+                    text: "What would make the \(topic.rawValue.lowercased()) idea about \(secondary) clearer or easier to act on?",
                     rationale: "This pushes for a concrete next step instead of staying abstract."
-                ),
-                ConversationQuestion(
-                    text: "Which shared assumption should be named before the conversation moves forward?",
-                    rationale: "This helps turn implicit agreement into something everyone can examine."
                 )
             ],
             challenging: [
                 ConversationQuestion(
-                    text: "What evidence would change our mind about \(primary)?",
+                    text: "What evidence would change our mind about \(primary) in this \(topic.rawValue.lowercased()) context?",
                     rationale: "This tests whether the current view is open to revision."
                 ),
                 ConversationQuestion(
-                    text: "What important cost, constraint, or tradeoff has not been discussed yet?",
+                    text: "What important \(topic.rawValue.lowercased()) cost, constraint, or tradeoff has not been discussed yet?",
                     rationale: "This surfaces risks that may be missing from the current framing."
-                ),
-                ConversationQuestion(
-                    text: "Who would disagree with the direction of this conversation, and what would their strongest objection be?",
-                    rationale: "This introduces an outside perspective without derailing the discussion."
                 )
             ]
         )

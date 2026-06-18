@@ -18,7 +18,7 @@ This is intentionally simple for the first milestone. SwiftData persistence shou
 
 `TranscriptionProviding` is the seam for audio-file and eventually live transcription.
 
-The current implementation, `LocalSpeechTranscriptionService`, uses Apple's Speech framework with `requiresOnDeviceRecognition = true`. It supports live microphone transcription and imported audio-file transcription through `SFSpeechAudioBufferRecognitionRequest`. Imported files are decoded with `AVAudioFile` into PCM buffers before being sent to Speech, which keeps the file path closer to the live microphone path.
+The current implementation, `LocalSpeechTranscriptionService`, uses Apple's Speech framework with `requiresOnDeviceRecognition = true`. It supports live microphone transcription and imported audio-file transcription. Imports are copied locally from the selected Files/iCloud URL, then the app prefers iOS 26 `SpeechAnalyzer`/`SpeechTranscriber` for longer files before falling back to buffer-based `SFSpeechAudioBufferRecognitionRequest`.
 
 The app checks that the recognizer supports on-device recognition for the active locale before starting. If local recognition is unavailable, it fails visibly instead of falling back to network speech recognition.
 
@@ -30,7 +30,7 @@ Long live sessions will need transcript chunking. The first prototype keeps one 
 
 `FoundationQuestionGenerator` uses Apple Foundation Models through `SystemLanguageModel.default` and checks `availability` before creating a `LanguageModelSession`. If the model is not available on device, generation fails visibly rather than falling back to a cloud provider.
 
-The first response format is plain text with a strict parser. The app throttles transcript changes and refreshes questions while conversation continues, rather than waiting for recording to stop. Once the end-to-end workflow is stable, this can move to structured generation using Foundation Models schemas.
+The first response format is plain text with a strict parser. The app throttles transcript changes and refreshes questions while conversation continues, rather than waiting for recording to stop. New questions are added to the top of the feed, and the selected conversation topic is passed into the prompt. Once the end-to-end workflow is stable, this can move to structured generation using Foundation Models schemas.
 
 ## Product Flow
 

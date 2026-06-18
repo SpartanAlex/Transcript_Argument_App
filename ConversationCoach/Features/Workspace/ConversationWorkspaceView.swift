@@ -72,6 +72,9 @@ struct ConversationWorkspaceView: View {
 
             Task { await appModel.importAudio(from: url) }
         }
+        .onChange(of: appModel.conversationTopic) {
+            appModel.conversationTopicDidChange()
+        }
     }
 
     private var workspaceHeader: some View {
@@ -96,6 +99,14 @@ struct ConversationWorkspaceView: View {
             }
 
             Spacer()
+
+            Picker("Topic", selection: $appModel.conversationTopic) {
+                ForEach(ConversationTopic.allCases) { topic in
+                    Text(topic.rawValue).tag(topic)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(maxWidth: 180)
 
             Button {
                 Task { await appModel.toggleRecording() }
@@ -142,27 +153,36 @@ struct ConversationWorkspaceView: View {
 
     private var questionsPanel: some View {
         VStack(alignment: .leading, spacing: 16) {
-            PanelHeader(title: "Questions", systemImage: "questionmark.bubble")
+            HStack(spacing: 10) {
+                PanelHeader(title: "Question Feed", systemImage: "questionmark.bubble")
+
+                if appModel.generationState == .generating {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
 
             switch appModel.generationState {
             case .generating:
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if let questionSet = session.questionSet {
+                    questionFeed(questionSet)
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             case let .failed(message):
-                ContentUnavailableView(
-                    "Questions Unavailable",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(message)
-                )
+                if let questionSet = session.questionSet {
+                    questionFeed(questionSet)
+                } else {
+                    ContentUnavailableView(
+                        "Questions Unavailable",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(message)
+                    )
+                }
             case .idle:
                 if let questionSet = session.questionSet {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
-                            QuestionSection(title: "For", tint: .green, questions: questionSet.supportive)
-                            QuestionSection(title: "Against", tint: .red, questions: questionSet.challenging)
-                        }
-                        .padding(.bottom, 24)
-                    }
+                    questionFeed(questionSet)
                 } else {
                     ContentUnavailableView(
                         "No Questions",
@@ -175,6 +195,16 @@ struct ConversationWorkspaceView: View {
         }
         .padding(24)
         .background(Color(.secondarySystemBackground))
+    }
+
+    private func questionFeed(_ questionSet: QuestionSet) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                QuestionSection(title: "For", tint: .green, questions: questionSet.supportive)
+                QuestionSection(title: "Against", tint: .red, questions: questionSet.challenging)
+            }
+            .padding(.bottom, 24)
+        }
     }
 
     private var recorderIcon: String {
@@ -347,6 +377,10 @@ private struct QuestionSection: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
+
+                    Text(question.createdAt, style: .time)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)

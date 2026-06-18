@@ -24,6 +24,8 @@ The intended workflow:
 - Local-only audio-file transcription for Voice Memos/File imports.
 - Foundation Models question-generation service.
 - Throttled automatic question refresh while transcript text changes.
+- Conversation topic selector to focus generated questions.
+- Accumulating question feed with newer questions at the top.
 - Local session model stored in memory for the first prototype.
 
 ## Next Milestones
