@@ -9,7 +9,7 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "6.0"
     IPHONEOS_DEPLOYMENT_TARGET: "26.0"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: UKT8TSAW8A
 targets:
   ConversationCoach:
     type: application
@@ -21,6 +21,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.alexbelotz.ConversationCoach
         PRODUCT_NAME: ConversationCoach
+        GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_CFBundleDisplayName: Conversation Coach
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
@@ -36,6 +37,8 @@ targets:
     deploymentTarget: "26.0"
     sources:
       - ConversationCoachTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: ConversationCoach
-

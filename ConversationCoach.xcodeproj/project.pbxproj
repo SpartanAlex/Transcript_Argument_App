@@ -222,10 +222,10 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					4EDE53885C103A2E58E909A6 = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = UKT8TSAW8A;
 					};
 					F4B12CB033ABCF6989CAF8EE = {
-						DevelopmentTeam = "";
+						DevelopmentTeam = UKT8TSAW8A;
 					};
 				};
 			};
@@ -295,6 +295,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Conversation Coach";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Conversation Coach records audio only when you start a session so it can create a local transcript.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Conversation Coach uses on-device speech recognition when available to create local transcripts.";
@@ -319,6 +320,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -368,7 +370,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = UKT8TSAW8A;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -395,6 +397,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -444,7 +447,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = UKT8TSAW8A;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -479,6 +482,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Conversation Coach";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Conversation Coach records audio only when you start a session so it can create a local transcript.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Conversation Coach uses on-device speech recognition when available to create local transcripts.";
