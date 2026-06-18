@@ -1,0 +1,41 @@
+name: ConversationCoach
+options:
+  bundleIdPrefix: com.alexbelotz
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "26.0"
+    DEVELOPMENT_TEAM: ""
+targets:
+  ConversationCoach:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - ConversationCoach
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.alexbelotz.ConversationCoach
+        PRODUCT_NAME: ConversationCoach
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_CFBundleDisplayName: Conversation Coach
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Conversation Coach records audio only when you start a session so it can create a local transcript.
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Conversation Coach uses on-device speech recognition when available to create local transcripts.
+  ConversationCoachTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - ConversationCoachTests
+    dependencies:
+      - target: ConversationCoach
+
