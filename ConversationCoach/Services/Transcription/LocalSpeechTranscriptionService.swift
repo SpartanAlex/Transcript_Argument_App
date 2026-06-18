@@ -85,6 +85,10 @@ final class LocalSpeechTranscriptionService: NSObject, TranscriptionProviding {
         inputNode.removeTap(onBus: 0)
 
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        guard recordingFormat.sampleRate > 0, recordingFormat.channelCount > 0 else {
+            throw TranscriptionError.microphoneFormatUnavailable
+        }
+
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak request] buffer, _ in
             request?.append(buffer)
         }
@@ -204,6 +208,7 @@ enum TranscriptionError: LocalizedError {
     case recognizerTemporarilyUnavailable
     case onDeviceRecognitionUnavailable(String)
     case noSpeechRecognized
+    case microphoneFormatUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -221,6 +226,8 @@ enum TranscriptionError: LocalizedError {
             "On-device speech recognition is not available for \(locale)."
         case .noSpeechRecognized:
             "No speech was recognized in that audio."
+        case .microphoneFormatUnavailable:
+            "The microphone did not provide a valid audio format."
         }
     }
 }
