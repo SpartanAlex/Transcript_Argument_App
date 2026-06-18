@@ -41,27 +41,12 @@ struct FoundationQuestionGenerator: QuestionGenerating {
             Produce concise, specific questions.
             Separate questions that strengthen or clarify the current line of thought from questions that challenge assumptions, risks, or missing evidence.
             Avoid giving advice as if you are a party to the conversation.
+            Never return placeholder text.
             """
         )
 
-        let prompt = """
-        Transcript:
-        \(transcript)
-
-        Return exactly this plain text format:
-        FOR:
-        - Question? | Why this helps.
-        - Question? | Why this helps.
-        - Question? | Why this helps.
-
-        AGAINST:
-        - Question? | Why this helps.
-        - Question? | Why this helps.
-        - Question? | Why this helps.
-        """
-
         let response = try await session.respond(
-            to: prompt,
+            to: Self.prompt(for: transcript),
             options: GenerationOptions(
                 sampling: .greedy,
                 temperature: 0.2,
@@ -69,13 +54,38 @@ struct FoundationQuestionGenerator: QuestionGenerating {
             )
         )
 
-        return try Self.parse(response.content)
+        return Self.questionSet(from: response.content, transcript: transcript)
         #else
         throw QuestionGenerationError.modelUnavailable("Apple Foundation Models are not present in this SDK.")
         #endif
     }
 
-    private static func parse(_ content: String) throws -> QuestionSet {
+    private static func prompt(for transcript: String) -> String {
+        """
+        Read the transcript inside the delimiters and write questions a participant could ask next.
+
+        <<<TRANSCRIPT
+        \(transcript)
+        TRANSCRIPT>>>
+
+        Output only two sections named FOR and AGAINST.
+        Under each section, write three bullet points.
+        Each bullet must contain one concrete question based on the transcript, then a vertical bar, then a short reason the question is useful.
+        The question text must not be generic and must not contain the words "Question", "placeholder", or "Why this helps".
+        """
+    }
+
+    private static func questionSet(from content: String, transcript: String) -> QuestionSet {
+        let parsed = parse(content)
+        let fallback = fallbackQuestionSet(from: transcript)
+
+        return QuestionSet(
+            supportive: fill(parsed.supportive, with: fallback.supportive),
+            challenging: fill(parsed.challenging, with: fallback.challenging)
+        )
+    }
+
+    private static func parse(_ content: String) -> QuestionSet {
         var supportive: [ConversationQuestion] = []
         var challenging: [ConversationQuestion] = []
         var section: Section?
@@ -84,28 +94,32 @@ struct FoundationQuestionGenerator: QuestionGenerating {
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             guard line.isEmpty == false else { continue }
 
-            if line.uppercased().hasPrefix("FOR:") {
+            let sectionLabel = line
+                .uppercased()
+                .trimmingCharacters(in: CharacterSet(charactersIn: ":"))
+
+            if sectionLabel == "FOR" || sectionLabel.hasPrefix("SUPPORT") {
                 section = .supportive
                 continue
             }
 
-            if line.uppercased().hasPrefix("AGAINST:") {
+            if sectionLabel == "AGAINST" || sectionLabel.hasPrefix("CHALLENGE") {
                 section = .challenging
                 continue
             }
 
-            guard line.hasPrefix("-"), let section else { continue }
+            guard let section else { continue }
 
-            let cleaned = line
-                .dropFirst()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let parts = cleaned
-                .components(separatedBy: "|")
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            let cleaned = bulletText(from: line)
+            guard cleaned.isEmpty == false else { continue }
+
+            let parts = splitQuestionAndRationale(cleaned)
+            let questionText = parts.question.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard isUsableQuestion(questionText) else { continue }
 
             let question = ConversationQuestion(
-                text: parts.first ?? cleaned,
-                rationale: parts.dropFirst().first ?? ""
+                text: questionText,
+                rationale: parts.rationale.trimmingCharacters(in: .whitespacesAndNewlines)
             )
 
             switch section {
@@ -116,11 +130,145 @@ struct FoundationQuestionGenerator: QuestionGenerating {
             }
         }
 
-        guard supportive.isEmpty == false || challenging.isEmpty == false else {
-            throw QuestionGenerationError.emptyResponse
+        return QuestionSet(supportive: supportive, challenging: challenging)
+    }
+
+    private static func bulletText(from line: String) -> String {
+        var cleaned = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let first = cleaned.first, ["-", "*"].contains(first) {
+            cleaned = String(cleaned.dropFirst())
+        } else if let range = cleaned.range(
+            of: #"^\d+[\.\)]\s+"#,
+            options: .regularExpression
+        ) {
+            cleaned.removeSubrange(range)
+        } else {
+            return ""
         }
 
-        return QuestionSet(supportive: supportive, challenging: challenging)
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func splitQuestionAndRationale(_ text: String) -> (question: String, rationale: String) {
+        let separators = ["|", " -- ", " - "]
+
+        for separator in separators {
+            let parts = text.components(separatedBy: separator)
+            guard parts.count > 1 else { continue }
+
+            return (
+                parts[0].trimmingCharacters(in: .whitespacesAndNewlines),
+                parts.dropFirst().joined(separator: separator).trimmingCharacters(in: .whitespacesAndNewlines)
+            )
+        }
+
+        return (text, "")
+    }
+
+    private static func isUsableQuestion(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercased = trimmed.lowercased()
+
+        guard trimmed.count >= 12 else { return false }
+        guard trimmed.contains("?") else { return false }
+
+        let blockedFragments = [
+            "question?",
+            "why this helps",
+            "<question",
+            "<rationale",
+            "placeholder",
+            "insert",
+            "your question"
+        ]
+
+        return blockedFragments.contains { lowercased.contains($0) } == false
+    }
+
+    private static func fill(
+        _ generated: [ConversationQuestion],
+        with fallback: [ConversationQuestion],
+        targetCount: Int = 3
+    ) -> [ConversationQuestion] {
+        var result = generated
+
+        for question in fallback where result.count < targetCount {
+            let isDuplicate = result.contains {
+                $0.text.caseInsensitiveCompare(question.text) == .orderedSame
+            }
+
+            if isDuplicate == false {
+                result.append(question)
+            }
+        }
+
+        return Array(result.prefix(targetCount))
+    }
+
+    private static func fallbackQuestionSet(from transcript: String) -> QuestionSet {
+        let topics = salientTerms(from: transcript)
+        let primary = topics.first ?? "the main point"
+        let secondary = topics.dropFirst().first ?? "the next decision"
+
+        return QuestionSet(
+            supportive: [
+                ConversationQuestion(
+                    text: "What evidence in the conversation most strongly supports the point about \(primary)?",
+                    rationale: "This asks the group to anchor the discussion in what has already been said."
+                ),
+                ConversationQuestion(
+                    text: "What would make the idea about \(secondary) clearer or easier to act on?",
+                    rationale: "This pushes for a concrete next step instead of staying abstract."
+                ),
+                ConversationQuestion(
+                    text: "Which shared assumption should be named before the conversation moves forward?",
+                    rationale: "This helps turn implicit agreement into something everyone can examine."
+                )
+            ],
+            challenging: [
+                ConversationQuestion(
+                    text: "What evidence would change our mind about \(primary)?",
+                    rationale: "This tests whether the current view is open to revision."
+                ),
+                ConversationQuestion(
+                    text: "What important cost, constraint, or tradeoff has not been discussed yet?",
+                    rationale: "This surfaces risks that may be missing from the current framing."
+                ),
+                ConversationQuestion(
+                    text: "Who would disagree with the direction of this conversation, and what would their strongest objection be?",
+                    rationale: "This introduces an outside perspective without derailing the discussion."
+                )
+            ]
+        )
+    }
+
+    private static func salientTerms(from transcript: String) -> [String] {
+        let stopWords: Set<String> = [
+            "about", "after", "again", "also", "because", "before", "being", "could",
+            "conversation", "does", "going", "have", "here", "into", "just", "like",
+            "more", "need", "only", "really", "should", "some", "that", "their",
+            "there", "these", "thing", "think", "this", "those", "through", "want",
+            "were", "what", "when", "where", "which", "with", "would", "your"
+        ]
+
+        let words = transcript
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count > 3 && stopWords.contains($0) == false }
+
+        let counts = Dictionary(words.map { ($0, 1) }, uniquingKeysWith: +)
+
+        return counts
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    lhs.key < rhs.key
+                } else {
+                    lhs.value > rhs.value
+                }
+            }
+            .prefix(2)
+            .map(\.key)
     }
 
     private enum Section {
@@ -144,4 +292,3 @@ struct FoundationQuestionGenerator: QuestionGenerating {
     }
     #endif
 }
-
