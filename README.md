@@ -23,6 +23,7 @@ The intended workflow:
 - Local-only microphone transcription using Apple's Speech framework.
 - Local-only audio-file transcription for Voice Memos/File imports.
 - Foundation Models question-generation service.
+- Debounced automatic question refresh as transcript text changes.
 - Local session model stored in memory for the first prototype.
 
 ## Next Milestones

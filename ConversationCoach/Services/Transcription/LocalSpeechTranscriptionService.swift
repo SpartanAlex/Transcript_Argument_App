@@ -1,6 +1,6 @@
 import AVFAudio
 import Foundation
-import Speech
+@preconcurrency import Speech
 
 final class LocalSpeechTranscriptionService: TranscriptionProviding, @unchecked Sendable {
     private let locale: Locale
@@ -34,20 +34,28 @@ final class LocalSpeechTranscriptionService: TranscriptionProviding, @unchecked 
             }
         }
 
-        let request = SFSpeechURLRecognitionRequest(url: url)
+        let request = SFSpeechAudioBufferRecognitionRequest()
         configure(request)
 
         return try await withCheckedThrowingContinuation { continuation in
             var latestText = ""
             var didResume = false
+            let resumeLock = NSLock()
+            var recognitionTask: SFSpeechRecognitionTask?
 
             func resumeOnce(_ result: Result<String, Error>) {
+                resumeLock.lock()
+                defer { resumeLock.unlock() }
+
                 guard didResume == false else { return }
                 didResume = true
+                if case .failure = result {
+                    recognitionTask?.cancel()
+                }
                 continuation.resume(with: result)
             }
 
-            recognizer.recognitionTask(with: request) { result, error in
+            recognitionTask = recognizer.recognitionTask(with: request) { result, error in
                 if let result {
                     latestText = result.bestTranscription.formattedString
 
@@ -62,6 +70,16 @@ final class LocalSpeechTranscriptionService: TranscriptionProviding, @unchecked 
                 }
 
                 if let error {
+                    resumeOnce(.failure(error))
+                }
+            }
+
+            let appendTarget = SpeechBufferAppendTarget(request)
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try Self.appendAudioFile(at: url, to: appendTarget.request)
+                } catch {
                     resumeOnce(.failure(error))
                 }
             }
@@ -202,6 +220,40 @@ final class LocalSpeechTranscriptionService: TranscriptionProviding, @unchecked 
         ]
     }
 
+    private static func appendAudioFile(
+        at url: URL,
+        to request: SFSpeechAudioBufferRecognitionRequest
+    ) throws {
+        let audioFile = try AVAudioFile(forReading: url)
+        let format = audioFile.processingFormat
+
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw TranscriptionError.audioFileFormatUnavailable
+        }
+
+        let bufferCapacity: AVAudioFrameCount = 4096
+
+        while audioFile.framePosition < audioFile.length {
+            let framesRemaining = audioFile.length - audioFile.framePosition
+            let frameCount = AVAudioFrameCount(min(Int64(bufferCapacity), framesRemaining))
+
+            guard let buffer = AVAudioPCMBuffer(
+                pcmFormat: format,
+                frameCapacity: frameCount
+            ) else {
+                throw TranscriptionError.audioFileFormatUnavailable
+            }
+
+            try audioFile.read(into: buffer, frameCount: frameCount)
+
+            if buffer.frameLength > 0 {
+                request.append(buffer)
+            }
+        }
+
+        request.endAudio()
+    }
+
     private func makeOnDeviceRecognizer() throws -> SFSpeechRecognizer {
         guard let recognizer = SFSpeechRecognizer(locale: locale) else {
             throw TranscriptionError.recognizerUnavailable(locale.identifier)
@@ -262,6 +314,14 @@ private struct LiveRecognitionState {
     var recognizer: SFSpeechRecognizer?
 }
 
+private final class SpeechBufferAppendTarget: @unchecked Sendable {
+    let request: SFSpeechAudioBufferRecognitionRequest
+
+    init(_ request: SFSpeechAudioBufferRecognitionRequest) {
+        self.request = request
+    }
+}
+
 enum TranscriptionError: LocalizedError {
     case speechPermissionDenied
     case speechPermissionRestricted
@@ -271,6 +331,7 @@ enum TranscriptionError: LocalizedError {
     case onDeviceRecognitionUnavailable(String)
     case noSpeechRecognized
     case microphoneFormatUnavailable
+    case audioFileFormatUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -290,6 +351,8 @@ enum TranscriptionError: LocalizedError {
             "No speech was recognized in that audio."
         case .microphoneFormatUnavailable:
             "The microphone did not provide a valid audio format."
+        case .audioFileFormatUnavailable:
+            "That audio file could not be decoded into a local speech-recognition format."
         }
     }
 }
