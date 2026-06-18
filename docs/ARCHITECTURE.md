@@ -30,7 +30,7 @@ Long live sessions will need transcript chunking. The first prototype keeps one 
 
 `FoundationQuestionGenerator` uses Apple Foundation Models through `SystemLanguageModel.default` and checks `availability` before creating a `LanguageModelSession`. If the model is not available on device, generation fails visibly rather than falling back to a cloud provider.
 
-The first response format is plain text with a strict parser. The app debounces transcript changes and refreshes questions automatically after a few quiet seconds. Once the end-to-end workflow is stable, this can move to structured generation using Foundation Models schemas.
+The first response format is plain text with a strict parser. The app throttles transcript changes and refreshes questions while conversation continues, rather than waiting for recording to stop. Once the end-to-end workflow is stable, this can move to structured generation using Foundation Models schemas.
 
 ## Product Flow
 

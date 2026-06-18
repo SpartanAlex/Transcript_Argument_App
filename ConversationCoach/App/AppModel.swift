@@ -54,7 +54,10 @@ final class AppModel: ObservableObject {
                 try await transcription.startLiveTranscription { [weak self] update in
                     Task { @MainActor in
                         guard let self else { return }
-                        self.liveTranscriptPreview = update.text
+                        self.liveTranscriptPreview = Self.mergedLiveTranscript(
+                            current: self.liveTranscriptPreview,
+                            update: update.text
+                        )
                         self.scheduleAutomaticQuestionGeneration()
                     }
                 }
@@ -158,18 +161,23 @@ final class AppModel: ObservableObject {
     }
 
     private func scheduleAutomaticQuestionGeneration(delay: TimeInterval = 5.0) {
+        guard autoGenerationTask == nil else { return }
         guard let session = selectedSession else { return }
 
         let transcript = currentTranscriptText(for: session)
         guard shouldAutoGenerateQuestions(for: transcript) else { return }
 
-        autoGenerationTask?.cancel()
         autoGenerationTask = Task { [weak self] in
             let nanoseconds = UInt64(delay * 1_000_000_000)
             try? await Task.sleep(nanoseconds: nanoseconds)
             guard Task.isCancelled == false else { return }
-            await self?.generateQuestions(trigger: .automatic)
+            await self?.runAutomaticQuestionGeneration()
         }
+    }
+
+    private func runAutomaticQuestionGeneration() async {
+        autoGenerationTask = nil
+        await generateQuestions(trigger: .automatic)
     }
 
     private func shouldAutoGenerateQuestions(for transcript: String) -> Bool {
@@ -184,6 +192,25 @@ final class AppModel: ObservableObject {
         }
 
         return abs(trimmed.count - previous.count) >= 80
+    }
+
+    private static func mergedLiveTranscript(current: String, update: String) -> String {
+        let current = current.trimmingCharacters(in: .whitespacesAndNewlines)
+        let update = update.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard update.isEmpty == false else { return current }
+        guard current.isEmpty == false else { return update }
+        guard update != current else { return current }
+
+        if update.count >= current.count {
+            return update
+        }
+
+        if current.localizedCaseInsensitiveContains(update) {
+            return current
+        }
+
+        return current
     }
 }
 

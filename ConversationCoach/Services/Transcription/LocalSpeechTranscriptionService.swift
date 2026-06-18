@@ -224,34 +224,106 @@ final class LocalSpeechTranscriptionService: TranscriptionProviding, @unchecked 
         at url: URL,
         to request: SFSpeechAudioBufferRecognitionRequest
     ) throws {
-        let audioFile = try AVAudioFile(forReading: url)
-        let format = audioFile.processingFormat
+        defer {
+            request.endAudio()
+        }
 
-        guard format.sampleRate > 0, format.channelCount > 0 else {
+        let audioFile = try AVAudioFile(forReading: url)
+        let inputFormat = audioFile.processingFormat
+        let outputFormat = request.nativeAudioFormat
+
+        guard inputFormat.sampleRate > 0,
+              inputFormat.channelCount > 0,
+              outputFormat.sampleRate > 0,
+              outputFormat.channelCount > 0
+        else {
             throw TranscriptionError.audioFileFormatUnavailable
         }
 
-        let bufferCapacity: AVAudioFrameCount = 4096
+        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+            throw TranscriptionError.audioFileFormatUnavailable
+        }
+
+        let inputCapacity: AVAudioFrameCount = 4096
 
         while audioFile.framePosition < audioFile.length {
             let framesRemaining = audioFile.length - audioFile.framePosition
-            let frameCount = AVAudioFrameCount(min(Int64(bufferCapacity), framesRemaining))
+            let inputFrameCount = AVAudioFrameCount(min(Int64(inputCapacity), framesRemaining))
 
-            guard let buffer = AVAudioPCMBuffer(
-                pcmFormat: format,
-                frameCapacity: frameCount
+            guard let inputBuffer = AVAudioPCMBuffer(
+                pcmFormat: inputFormat,
+                frameCapacity: inputFrameCount
             ) else {
                 throw TranscriptionError.audioFileFormatUnavailable
             }
 
-            try audioFile.read(into: buffer, frameCount: frameCount)
+            try audioFile.read(into: inputBuffer, frameCount: inputFrameCount)
 
-            if buffer.frameLength > 0 {
-                request.append(buffer)
+            if inputBuffer.frameLength > 0 {
+                try appendConvertedBuffer(
+                    inputBuffer,
+                    outputFormat: outputFormat,
+                    converter: converter,
+                    to: request
+                )
             }
         }
+    }
 
-        request.endAudio()
+    private static func appendConvertedBuffer(
+        _ inputBuffer: AVAudioPCMBuffer,
+        outputFormat: AVAudioFormat,
+        converter: AVAudioConverter,
+        to request: SFSpeechAudioBufferRecognitionRequest
+    ) throws {
+        let sampleRateRatio = outputFormat.sampleRate / inputBuffer.format.sampleRate
+        let outputCapacity = max(
+            AVAudioFrameCount(Double(inputBuffer.frameLength) * sampleRateRatio) + 512,
+            512
+        )
+
+        var inputWasProvided = false
+        var isDone = false
+
+        repeat {
+            guard let outputBuffer = AVAudioPCMBuffer(
+                pcmFormat: outputFormat,
+                frameCapacity: outputCapacity
+            ) else {
+                throw TranscriptionError.audioFileFormatUnavailable
+            }
+
+            var conversionError: NSError?
+            let status = converter.convert(to: outputBuffer, error: &conversionError) { _, outStatus in
+                if inputWasProvided {
+                    outStatus.pointee = .noDataNow
+                    return nil
+                }
+
+                inputWasProvided = true
+                outStatus.pointee = .haveData
+                return inputBuffer
+            }
+
+            if let conversionError {
+                throw conversionError
+            }
+
+            if outputBuffer.frameLength > 0 {
+                request.append(outputBuffer)
+            }
+
+            switch status {
+            case .haveData:
+                isDone = false
+            case .inputRanDry, .endOfStream:
+                isDone = true
+            case .error:
+                throw TranscriptionError.audioFileFormatUnavailable
+            @unknown default:
+                isDone = true
+            }
+        } while isDone == false
     }
 
     private func makeOnDeviceRecognizer() throws -> SFSpeechRecognizer {
