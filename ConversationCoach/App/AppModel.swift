@@ -50,7 +50,9 @@ final class AppModel: ObservableObject {
             do {
                 liveTranscriptPreview = ""
                 try await transcription.startLiveTranscription { [weak self] update in
-                    self?.liveTranscriptPreview = update.text
+                    Task { @MainActor in
+                        self?.liveTranscriptPreview = update.text
+                    }
                 }
                 recorderState = .recording(startedAt: .now)
             } catch {

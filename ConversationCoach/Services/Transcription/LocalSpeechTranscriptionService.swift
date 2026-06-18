@@ -2,23 +2,30 @@ import AVFAudio
 import Foundation
 import Speech
 
-@MainActor
-final class LocalSpeechTranscriptionService: NSObject, TranscriptionProviding {
+final class LocalSpeechTranscriptionService: TranscriptionProviding, @unchecked Sendable {
     private let locale: Locale
     private let audioEngine = AVAudioEngine()
+    private let lock = NSLock()
+    private let recognitionQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "ConversationCoach.SpeechRecognition"
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
 
     private var liveRecognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var liveRecognitionTask: SFSpeechRecognitionTask?
+    private var liveRecognizer: SFSpeechRecognizer?
     private var latestLiveTranscript = ""
 
     init(locale: Locale = .current) {
         self.locale = locale
-        super.init()
     }
 
     func transcribeAudioFile(at url: URL) async throws -> String {
         try await requestSpeechAuthorization()
         let recognizer = try makeOnDeviceRecognizer()
+        recognizer.queue = recognitionQueue
 
         let didAccessSecurityScopedResource = url.startAccessingSecurityScopedResource()
         defer {
@@ -61,7 +68,7 @@ final class LocalSpeechTranscriptionService: NSObject, TranscriptionProviding {
         }
     }
 
-    func startLiveTranscription(updateHandler: @escaping @MainActor (LiveTranscriptionUpdate) -> Void) async throws {
+    func startLiveTranscription(updateHandler: @escaping @Sendable (LiveTranscriptionUpdate) -> Void) async throws {
         try await requestSpeechAuthorization()
         let microphoneAccessGranted = await requestMicrophoneAccess()
         guard microphoneAccessGranted else {
@@ -69,13 +76,14 @@ final class LocalSpeechTranscriptionService: NSObject, TranscriptionProviding {
         }
 
         let recognizer = try makeOnDeviceRecognizer()
-        stopLiveRecognition(cancelTask: true)
+        recognizer.queue = recognitionQueue
+        stopLiveRecognition(action: .cancel)
 
-        latestLiveTranscript = ""
+        setLatestLiveTranscript("")
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         configure(request)
-        liveRecognitionRequest = request
+        setLiveRecognition(request: request, task: nil, recognizer: recognizer)
 
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
@@ -96,46 +104,88 @@ final class LocalSpeechTranscriptionService: NSObject, TranscriptionProviding {
         audioEngine.prepare()
         try audioEngine.start()
 
-        liveRecognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            Task { @MainActor in
-                guard let self else { return }
+        let task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            guard let self else { return }
 
-                if let result {
-                    let text = result.bestTranscription.formattedString
-                    self.latestLiveTranscript = text
-                    updateHandler(LiveTranscriptionUpdate(text: text, isFinal: result.isFinal))
-                }
+            if let result {
+                let text = result.bestTranscription.formattedString
+                self.setLatestLiveTranscript(text)
+                updateHandler(LiveTranscriptionUpdate(text: text, isFinal: result.isFinal))
+            }
 
-                if error != nil {
-                    self.stopLiveRecognition(cancelTask: false)
-                }
+            if error != nil {
+                self.stopLiveRecognition(action: .none)
             }
         }
+
+        setLiveRecognition(request: request, task: task, recognizer: recognizer)
     }
 
     func stopLiveTranscription() async -> String? {
-        let finalText = latestLiveTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        stopLiveRecognition(cancelTask: false)
+        let finalText = currentLatestLiveTranscript().trimmingCharacters(in: .whitespacesAndNewlines)
+        stopLiveRecognition(action: .finish)
         return finalText.isEmpty ? nil : finalText
     }
 
-    private func stopLiveRecognition(cancelTask: Bool) {
+    private func stopLiveRecognition(action: RecognitionStopAction) {
         if audioEngine.isRunning {
             audioEngine.inputNode.removeTap(onBus: 0)
             audioEngine.stop()
         }
 
-        liveRecognitionRequest?.endAudio()
-        liveRecognitionRequest = nil
+        let state = clearLiveRecognition()
 
-        if cancelTask {
-            liveRecognitionTask?.cancel()
-        } else {
-            liveRecognitionTask?.finish()
+        switch action {
+        case .cancel:
+            state.request?.endAudio()
+            state.task?.cancel()
+        case .finish:
+            state.request?.endAudio()
+            state.task?.finish()
+        case .none:
+            break
         }
 
-        liveRecognitionTask = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func setLiveRecognition(
+        request: SFSpeechAudioBufferRecognitionRequest?,
+        task: SFSpeechRecognitionTask?,
+        recognizer: SFSpeechRecognizer?
+    ) {
+        lock.lock()
+        liveRecognitionRequest = request
+        liveRecognitionTask = task
+        liveRecognizer = recognizer
+        lock.unlock()
+    }
+
+    private func clearLiveRecognition() -> LiveRecognitionState {
+        lock.lock()
+        let state = LiveRecognitionState(
+            request: liveRecognitionRequest,
+            task: liveRecognitionTask,
+            recognizer: liveRecognizer
+        )
+        liveRecognitionRequest = nil
+        liveRecognitionTask = nil
+        liveRecognizer = nil
+        lock.unlock()
+        return state
+    }
+
+    private func setLatestLiveTranscript(_ text: String) {
+        lock.lock()
+        latestLiveTranscript = text
+        lock.unlock()
+    }
+
+    private func currentLatestLiveTranscript() -> String {
+        lock.lock()
+        let text = latestLiveTranscript
+        lock.unlock()
+        return text
     }
 
     private func configure(_ request: SFSpeechRecognitionRequest) {
@@ -198,6 +248,18 @@ final class LocalSpeechTranscriptionService: NSObject, TranscriptionProviding {
             }
         }
     }
+}
+
+private enum RecognitionStopAction {
+    case cancel
+    case finish
+    case none
+}
+
+private struct LiveRecognitionState {
+    var request: SFSpeechAudioBufferRecognitionRequest?
+    var task: SFSpeechRecognitionTask?
+    var recognizer: SFSpeechRecognizer?
 }
 
 enum TranscriptionError: LocalizedError {
