@@ -115,7 +115,7 @@ struct ConversationWorkspaceView: View {
         VStack(alignment: .leading, spacing: 16) {
             PanelHeader(title: "Transcript", systemImage: "quote.bubble")
 
-            if session.segments.isEmpty {
+            if session.segments.isEmpty && appModel.liveTranscriptPreview.isEmpty && isRecording == false {
                 ContentUnavailableView(
                     "No Transcript",
                     systemImage: "waveform",
@@ -127,6 +127,10 @@ struct ConversationWorkspaceView: View {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(session.segments) { segment in
                             TranscriptSegmentRow(segment: segment)
+                        }
+
+                        if isRecording {
+                            LiveTranscriptPreviewRow(text: appModel.liveTranscriptPreview)
                         }
                     }
                     .padding(.bottom, 24)
@@ -217,9 +221,19 @@ struct ConversationWorkspaceView: View {
         switch appModel.recorderState {
         case .recording:
             .red
+        case .failed:
+            .orange
         default:
             .blue
         }
+    }
+
+    private var isRecording: Bool {
+        if case .recording = appModel.recorderState {
+            return true
+        }
+
+        return false
     }
 }
 
@@ -271,6 +285,43 @@ private struct TranscriptSegmentRow: View {
         }
         .padding(14)
         .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct LiveTranscriptPreviewRow: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Label("Live Audio", systemImage: "waveform")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.red)
+
+                Text("Local")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Listening...")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text(text)
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(14)
+        .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.red.opacity(0.18), lineWidth: 1)
+        )
     }
 }
 

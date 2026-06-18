@@ -20,26 +20,26 @@ The intended workflow:
 
 - SwiftUI app shell.
 - Session list and iPad workspace layout.
-- Import audio placeholder.
-- Microphone capture placeholder.
+- Local-only microphone transcription using Apple's Speech framework.
+- Local-only audio-file transcription for Voice Memos/File imports.
 - Foundation Models question-generation service.
 - Local session model stored in memory for the first prototype.
 
 ## Next Milestones
 
-1. Replace the transcription stub with live on-device transcription.
+1. Run on an Apple Intelligence-capable iPad and benchmark speech accuracy, latency, heat, and battery use.
 2. Persist sessions with SwiftData.
-3. Add Share Sheet/File import handling for Voice Memos exports.
-4. Add streaming transcript updates.
-5. Run on an Apple Intelligence-capable iPad and benchmark latency, heat, and battery use.
+3. Add Share Sheet handling for direct Voice Memos exports.
+4. Add transcript chunking for longer live sessions.
+5. Move question generation from plain-text parsing to structured Foundation Models output.
 
 ## Requirements
 
 - Xcode 26.4 or newer.
 - iOS/iPadOS 26.0 SDK.
 - Apple Intelligence-capable iPad or iPhone for Foundation Models.
+- A locale that supports Apple's on-device speech recognition.
 
 ## Build
 
 Open `ConversationCoach.xcodeproj` in Xcode and run the `ConversationCoach` scheme on a modern iPad or iPhone.
-

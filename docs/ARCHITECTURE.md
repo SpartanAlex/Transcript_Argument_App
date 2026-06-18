@@ -12,15 +12,17 @@ This is intentionally simple for the first milestone. SwiftData persistence shou
 
 `AudioCaptureProviding` is the seam for microphone recording.
 
-The first implementation, `AudioCaptureService`, requests microphone access, starts an `AVAudioEngine`, and installs an input tap. The tap is ready to feed audio buffers into the transcription layer in the next milestone.
+`AudioCaptureService` remains available as a low-level audio-capture seam, but the current prototype routes microphone audio through `LocalSpeechTranscriptionService` so live transcription can own the audio tap and speech request together.
 
 ## Transcription
 
 `TranscriptionProviding` is the seam for audio-file and eventually live transcription.
 
-The current implementation is a placeholder so the app can already exercise Voice Memos/File import paths without committing prematurely to one transcription API.
+The current implementation, `LocalSpeechTranscriptionService`, uses Apple's Speech framework with `requiresOnDeviceRecognition = true`. It supports both `SFSpeechAudioBufferRecognitionRequest` for live microphone transcription and `SFSpeechURLRecognitionRequest` for imported audio files.
 
-The next implementation should prefer Apple-native on-device transcription. If that is not accurate or responsive enough for live conversation, we can revisit the transcription layer while keeping Apple Foundation Models as the question engine.
+The app checks that the recognizer supports on-device recognition for the active locale before starting. If local recognition is unavailable, it fails visibly instead of falling back to network speech recognition.
+
+Long live sessions will need transcript chunking. The first prototype keeps one active recognition task and saves the current recognized text when recording stops.
 
 ## Question Generation
 
@@ -37,4 +39,3 @@ The first response format is plain text with a strict parser. Once the end-to-en
 3. Append transcript segments to the session.
 4. Generate "For" and "Against" questions from the accumulated transcript.
 5. Persist the session locally.
-

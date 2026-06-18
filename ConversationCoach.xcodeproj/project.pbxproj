@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0A041C4BE688ED78F7DF37F6 /* LocalTranscriptionPlaceholder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCA0411DD865BC4504FB51B5 /* LocalTranscriptionPlaceholder.swift */; };
 		0CDA0702B8EF42E4911C558C /* ConversationWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCB4A2688B514130E4558D96 /* ConversationWorkspaceView.swift */; };
 		1779845E006422AA70E6D9A8 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0599D2E6072ABF699EEBF548 /* AppModel.swift */; };
 		1C51374CA032989B74DC0816 /* QuestionSet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19351B1294197CF8AE75BD13 /* QuestionSet.swift */; };
@@ -18,6 +17,7 @@
 		A005EA6CB9305DF1A6C9F89B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6701661D85FD06FA57E4EE12 /* ContentView.swift */; };
 		A3092C1D5439F0D31366AE46 /* QuestionGenerating.swift in Sources */ = {isa = PBXBuildFile; fileRef = 409158A8BA82397EE9013C1E /* QuestionGenerating.swift */; };
 		A534D86C2CE884D806C9F230 /* ConversationCoachApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1804CED5BD158854A9CA28F6 /* ConversationCoachApp.swift */; };
+		C3DAFA278BD62C081A9BC39D /* LocalSpeechTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BAE871E6937F295BDA452D /* LocalSpeechTranscriptionService.swift */; };
 		D336154F7F171DEE0BDE615F /* TranscriptionProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572F84B199EFF2D846F48241 /* TranscriptionProviding.swift */; };
 		E208B352D04B4BF7B4D5BE5C /* ConversationSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CC50C5D8536B29F1A66C58B /* ConversationSession.swift */; };
 		F3DC3E0B86B56092E5D9D839 /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174F57423DD1BB7616F2DF81 /* SessionListView.swift */; };
@@ -50,8 +50,8 @@
 		987D8F5C1D5C2D67436D93CB /* TranscriptSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptSegment.swift; sourceTree = "<group>"; };
 		D2BE96BFE6A11F9058E94461 /* ConversationCoach.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ConversationCoach.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DCB4A2688B514130E4558D96 /* ConversationWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationWorkspaceView.swift; sourceTree = "<group>"; };
+		E5BAE871E6937F295BDA452D /* LocalSpeechTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSpeechTranscriptionService.swift; sourceTree = "<group>"; };
 		FA3B76F69A732C0A3778B0AB /* FoundationQuestionParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationQuestionParserTests.swift; sourceTree = "<group>"; };
-		FCA0411DD865BC4504FB51B5 /* LocalTranscriptionPlaceholder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriptionPlaceholder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -140,7 +140,7 @@
 		E97F0C19D59364B02EDE0063 /* Transcription */ = {
 			isa = PBXGroup;
 			children = (
-				FCA0411DD865BC4504FB51B5 /* LocalTranscriptionPlaceholder.swift */,
+				E5BAE871E6937F295BDA452D /* LocalSpeechTranscriptionService.swift */,
 				572F84B199EFF2D846F48241 /* TranscriptionProviding.swift */,
 			);
 			path = Transcription;
@@ -270,7 +270,7 @@
 				E208B352D04B4BF7B4D5BE5C /* ConversationSession.swift in Sources */,
 				0CDA0702B8EF42E4911C558C /* ConversationWorkspaceView.swift in Sources */,
 				3294229D13335D5B74BC8429 /* FoundationQuestionGenerator.swift in Sources */,
-				0A041C4BE688ED78F7DF37F6 /* LocalTranscriptionPlaceholder.swift in Sources */,
+				C3DAFA278BD62C081A9BC39D /* LocalSpeechTranscriptionService.swift in Sources */,
 				A3092C1D5439F0D31366AE46 /* QuestionGenerating.swift in Sources */,
 				1C51374CA032989B74DC0816 /* QuestionSet.swift in Sources */,
 				F3DC3E0B86B56092E5D9D839 /* SessionListView.swift in Sources */,

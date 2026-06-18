@@ -7,23 +7,21 @@ final class AppModel: ObservableObject {
     @Published var sessions: [ConversationSession]
     @Published var selectedSessionID: ConversationSession.ID?
     @Published var recorderState: RecorderState = .idle
+    @Published var liveTranscriptPreview = ""
     @Published var modelAvailability: ModelAvailabilitySummary = .checking
     @Published var generationState: GenerationState = .idle
 
-    private let audioCapture: AudioCaptureProviding
     private let transcription: TranscriptionProviding
     private let questionGenerator: QuestionGenerating
 
     init(
-        audioCapture: AudioCaptureProviding = AudioCaptureService(),
-        transcription: TranscriptionProviding = LocalTranscriptionPlaceholder(),
+        transcription: TranscriptionProviding? = nil,
         questionGenerator: QuestionGenerating = FoundationQuestionGenerator()
     ) {
         let firstSession = ConversationSession.sample
         self.sessions = [firstSession]
         self.selectedSessionID = firstSession.id
-        self.audioCapture = audioCapture
-        self.transcription = transcription
+        self.transcription = transcription ?? LocalSpeechTranscriptionService()
         self.questionGenerator = questionGenerator
 
         Task {
@@ -50,18 +48,27 @@ final class AppModel: ObservableObject {
         switch recorderState {
         case .idle, .failed:
             do {
-                try await audioCapture.start()
+                liveTranscriptPreview = ""
+                try await transcription.startLiveTranscription { [weak self] update in
+                    self?.liveTranscriptPreview = update.text
+                }
                 recorderState = .recording(startedAt: .now)
             } catch {
                 recorderState = .failed(error.localizedDescription)
+                appendTranscript(text: "Recording could not start: \(error.localizedDescription)", source: .system)
             }
         case .recording:
-            await audioCapture.stop()
+            let finalText = await transcription.stopLiveTranscription()
             recorderState = .idle
-            appendTranscript(
-                text: "Recording stopped. Live transcription will be connected in the next milestone.",
-                source: .system
-            )
+            let textToSave = (finalText ?? liveTranscriptPreview)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            liveTranscriptPreview = ""
+
+            if textToSave.isEmpty {
+                appendTranscript(text: "Recording stopped. No local speech was recognized.", source: .system)
+            } else {
+                appendTranscript(text: textToSave, source: .speaker("Live Audio"))
+            }
         }
     }
 
@@ -81,7 +88,10 @@ final class AppModel: ObservableObject {
     func generateQuestions() async {
         guard let session = selectedSession else { return }
 
-        let transcript = session.transcriptText
+        let transcript = [session.transcriptText, liveTranscriptPreview]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+            .joined(separator: "\n")
         guard transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
             generationState = .failed("A transcript is needed before questions can be generated.")
             return
